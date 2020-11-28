@@ -1,0 +1,123 @@
+open Angstrom;
+
+let parens = p => char('(') *> p <* char(')');
+let add = char('+') *> return((a, b) => a + b);
+let sub = char('-') *> return((a, b) => a - b);
+let mul = char('*') *> return((a, b) => a * b);
+let div = char('/') *> return((a, b) => a / b);
+let integer =
+  take_while1(
+    fun
+    | '0' .. '9' => true
+    | _ => false,
+  )
+  >>| int_of_string;
+
+let chainl1 = (e, op) => {
+  let rec go = acc =>
+    lift2((f, x) => f(acc, x), op, e) >>= go <|> return(acc);
+  e >>= (init => go(init));
+};
+
+let expr =
+  fix(expr => {
+    let factor = parens(expr) <|> integer;
+    let term = chainl1(factor, mul <|> div);
+    chainl1(term, add <|> sub);
+  });
+
+let eval = (str: string): int =>
+  switch (parse_string(~consume=All, expr, str)) {
+  | Ok(v) => v
+  | Error(msg) => failwith(msg)
+  };
+
+print_endline("eval: " ++ (eval("189*199") |> string_of_int));
+print_endline("Running Test Program:");
+let () = print_endline(Library.Util.hello());
+print_endline("------------");
+
+module JSON = {
+  type t =
+    | Boolean(bool)
+    | Number(float)
+    | String(string)
+    | Null
+    | Array(list(t))
+    | Object(list((t, t)));
+
+  let pair = (x, y) => (x, y);
+  let comma = char(',');
+
+  let nullParser = {
+    print_endline("nullParser");
+    string("null") *> return(Null);
+  };
+  let stringParser = {
+    print_endline("stringParser");
+    char('"') *> take_while1(c => c !== '"') >>| (s => String(s));
+  };
+  let numberParser = {
+    print_endline("numberParser");
+    take_while1(
+      fun
+      | '0' .. '9'
+      | '.' => true
+      | _ => false,
+    )
+    >>| (s => Number(float_of_string(s)));
+  };
+  let booleanParser = {
+    print_endline("booleanParser");
+    let trueParser = string("true") *> return(Boolean(true));
+    let falseParser = string("false") *> return(Boolean(false));
+    trueParser <|> falseParser;
+  };
+  let whiteSpaceParser = {
+    print_endline("whiteSpaceParser");
+    many(char(' ') <|> char('\n') <|> char('\r'));
+  };
+  let objectParser = json => {
+    print_endline("object");
+    char('{')
+    *> {
+      print_endline("kvs");
+      whiteSpaceParser
+      *> sep_by(comma, lift2(pair, stringParser <* char(':'), json))
+      >>| (kvs => Object(kvs));
+    }
+    <* char('}');
+  };
+  let arrayParser = json => {
+    print_endline("array");
+    char('[')
+    *> {
+      print_endline("vs");
+      whiteSpaceParser *> sep_by(comma, json) >>| (vs => Array(vs));
+    }
+    <* char(']');
+  };
+  let json =
+    fix(json => {
+      print_endline("json");
+      whiteSpaceParser
+      *> peek_char_fail
+      >>= (
+        c =>
+          switch (c) {
+          | '[' => arrayParser(json)
+          | '{' => objectParser(json)
+          | '"' => stringParser
+          | 't'
+          | 'f' => booleanParser
+          | 'n' => nullParser
+          | _ => numberParser
+          }
+      );
+    });
+};
+print_endline("------------");
+switch (parse_string(~consume=All, JSON.json, "{\"key\":null}")) {
+| Ok(v) => v
+| Error(msg) => failwith(msg)
+};

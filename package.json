@@ -1,0 +1,48 @@
+{
+  "name": "reason-snippets",
+  "version": "0.1.0",
+  "description": "Starter Reason Project",
+  "esy": {
+    "build": "dune build -p #{self.name}",
+    "buildDev": "pesy build",
+    "release": {
+      "rewritePrefix": true,
+      "releasedBinaries": [
+        "ReasonSnippetsApp"
+      ]
+    }
+  },
+  "pesy": {
+    "azure-project": "esy-dev/esy",
+    "github": "esy/pesy-reason-template"
+  },
+  "buildDirs": {
+    "library": {},
+    "bin": {
+      "imports": [
+        "Library = require('reason-snippets/library')",
+        "Angstrom = require('@opam/angstrom')"
+      ],
+      "bin": {
+        "ReasonSnippetsApp": "ReasonSnippetsApp.re"
+      }
+    }
+  },
+  "scripts": {
+    "start": "esy x ReasonSnippetsApp"
+  },
+  "dependencies": {
+    "@esy-ocaml/reason": "3.x.x",
+    "@opam/angstrom": "0.15.0",
+    "@opam/dune": "*",
+    "@pesy/esy-pesy": "0.1.0-alpha.13",
+    "ocaml": "4.6.10 - 4.10"
+  },
+  "devDependencies": {
+    "@opam/merlin": "*",
+    "@opam/ocaml-lsp-server": "ocaml/ocaml-lsp:ocaml-lsp-server.opam",
+    "refmterr": "^3.3.0",
+    "ocaml": "4.10.x",
+    "@opam/ocamlformat": "0.12"
+  }
+}

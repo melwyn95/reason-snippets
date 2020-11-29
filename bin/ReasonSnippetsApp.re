@@ -23,8 +23,7 @@ module EvalExpr = {
   let expr =
     fix(expr => {
       let factor = parens(expr) <|> integer;
-      let term = chainl1(factor, mul <|> div);
-      chainl1(term, add <|> sub);
+      chainl1(factor, choice([mul, div, add, sub]));
     });
 
   let eval = (str: string): int =>
@@ -38,107 +37,91 @@ let expr = "((1+2)*(3+4))";
 print_endline(
   "Eval: " ++ expr ++ " = " ++ (EvalExpr.eval(expr) |> string_of_int),
 );
-
 module JSON = {
   type t =
-    | Boolean(bool, string)
-    | Number(float, string)
+    | Number(float)
+    | Boolean(bool)
     | String(string)
     | Null
-    | Array(list(t))
-    | Object(list((t, t)));
+    | Object(list((string, t)))
+    | Array(list(t));
 
-  let pair = (x, y) => (x, y);
-
-  let lSquareBracket = char('[');
-  let rSquareBracket = char(']');
-  let lCurlyBracket = char('{');
-  let rCurlyBracket = char('}');
-  let colon = char(':');
   let comma = char(',');
+  let colon = char(':');
 
-  let parse = {
-    fix(json => {
+  /* Primitive Parsers */
+  let nullParser = string("null") *> return(Null);
+  let trueParser = string("true") *> return(Boolean(true));
+  let falseParser = string("false") *> return(Boolean(false));
+  let boolParser = trueParser <|> falseParser;
+
+  let numberParser =
+    take_while1(
+      fun
+      | '0' .. '9'
+      | '.' => true
+      | _ => false,
+    )
+    >>| (n => Number(float_of_string(n)));
+
+  let stringParser =
+    char('"')
+    *> take_while1(c => c != '"')
+    <* char('"')
+    >>| (s => String(s));
+
+  let keyParser = char('"') *> take_while1(c => c != '"') <* char('"');
+
+  let pair = (a, b) => (a, b);
+
+  let parse =
+    fix(parse => {
       let arrayParser =
-        lSquareBracket
-        *> sep_by(comma, json)
-        >>| (vs => Array(vs))
-        <* rSquareBracket;
-
-      let stringParser =
-        char('"')
-        *> take_while1(c => c != '"')
-        >>| (s => String(s))
-        <* char('"');
-
-      let booleanParser = {
-        let trueParser = string("true") *> return(Boolean(true, "true"));
-        let falseParser =
-          string("false") *> return(Boolean(false, "false"));
-        trueParser <|> falseParser;
-      };
-
-      let numberParser = {
-        take_while1(
-          fun
-          | '0' .. '9'
-          | '.' => true
-          | _ => false,
-        )
-        >>| (s => Number(float_of_string(s), s));
-      };
-
-      let nullParser = string("null") *> return(Null);
-
-      let mem = lift2(pair, stringParser <* colon, json);
-
+        char('[') *> sep_by(comma, parse) <* char(']') >>| (a => Array(a));
+      let member = lift2(pair, keyParser <* colon, parse);
       let objectParser =
-        lCurlyBracket
-        *> sep_by(comma, mem)
-        >>| (kvs => Object(kvs))
-        <* rCurlyBracket;
+        char('{')
+        *> sep_by(comma, member)
+        <* char('}')
+        >>| (o => Object(o));
 
       peek_char_fail
       >>= (
-        c => {
+        c =>
           switch (c) {
-          | '[' => arrayParser
-          | '{' => objectParser
           | '"' => stringParser
           | 't'
-          | 'f' => booleanParser
+          | 'f' => boolParser
           | 'n' => nullParser
+          | '[' => arrayParser
+          | '{' => objectParser
           | _ => numberParser
-          };
-        }
+          }
       );
     });
-  };
 
-  let rec stringify = json => {
-    switch (json) {
-    | Boolean(_, b) => b
-    | Number(_, n) => n
+  let rec stringify = jsont => {
+    let memberString = ((key, value)) =>
+      "\"" ++ key ++ "\"" ++ ":" ++ stringify(value);
+    switch (jsont) {
+    | Number(n) => string_of_float(n)
+    | Boolean(b) => string_of_bool(b)
     | String(s) => "\"" ++ s ++ "\""
     | Null => "null"
-    | Array(xs) =>
-      "[" ++ (List.map(x => stringify(x), xs) |> String.concat(",")) ++ "]"
     | Object(xys) =>
-      "{"
-      ++ (
-        xys
-        |> List.map(((x: t, y: t)) => stringify(x) ++ ":" ++ stringify(y))
-        |> String.concat(",")
-      )
-      ++ "}"
+      "{" ++ (List.map(memberString, xys) |> String.concat(",")) ++ "}"
+    | Array(xs) =>
+      "[" ++ (List.map(stringify, xs) |> String.concat(",")) ++ "]"
     };
   };
 };
 
-let jsonString = "{\"foo\":true,\"bar\":[1.2,false,{},[],null],\"baz\":{\"one\":[1],\"two\":null}}";
+let jsonString = "{\"foo\":true,\"bar\":[1.2,false,{},[],null,\"here\"],\"baz\":{\"one\":[2.4],\"two\":null}}";
 
 switch (parse_string(~consume=All, JSON.parse, jsonString)) {
 | Ok(v) =>
-  print_endline(JSON.stringify(v) == jsonString ? "PASSED" : "FAILED")
+  print_endline(
+    JSON.stringify(v) == jsonString ? jsonString ++ " PASSED" : "FAILED",
+  )
 | Error(msg) => failwith(msg)
 };

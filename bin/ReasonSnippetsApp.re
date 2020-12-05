@@ -125,3 +125,67 @@ switch (parse_string(~consume=All, JSON.parse, jsonString)) {
   )
 | Error(msg) => failwith(msg)
 };
+
+module Expr = {
+  type t =
+    | Int(int)
+    | Add(t, t)
+    | Sub(t, t)
+    | Mul(t, t)
+    | Div(t, t);
+
+  let integer =
+    take_while1(
+      fun
+      | '0' .. '9' => true
+      | _ => false,
+    )
+    >>| (n => Int(int_of_string(n)));
+
+  let parens = p => char('(') *> p <* char(')');
+
+  let add = char('+');
+  let sub = char('-');
+  let mul = char('*');
+  let div = char('/');
+
+  let combine = (left, operator, right) => {
+    switch (operator) {
+    | '+' => Add(left, right)
+    | '-' => Sub(left, right)
+    | '*' => Mul(left, right)
+    | '/' => Div(left, right)
+    | ' ' => left
+    | _ => failwith("ivalid operator: " ++ Char.escaped(operator))
+    };
+  };
+
+  let parser =
+    fix(parser => {
+      let leftTerm = parens(parser) <|> integer;
+      let operator = add <|> sub <|> mul <|> div <|> return(' ');
+      let rightTerm = parens(parser) <|> integer <|> return(Int(0));
+      lift3(combine, leftTerm, operator, rightTerm);
+    });
+
+  let parse = expr =>
+    switch (parse_string(~consume=All, parser, expr)) {
+    | Ok(v) => v
+    | Error(msg) => failwith(msg)
+    };
+
+  let rec eval = t =>
+    switch (t) {
+    | Int(n) => n
+    | Add(e1, e2) => eval(e1) + eval(e2)
+    | Sub(e1, e2) => eval(e1) - eval(e2)
+    | Div(e1, e2) => eval(e1) / eval(e2)
+    | Mul(e1, e2) => eval(e1) * eval(e2)
+    };
+};
+
+let expr = "((1+2)*(4+3))";
+let answer = Expr.parse(expr) |> Expr.eval;
+
+print_int(answer);
+print_newline();

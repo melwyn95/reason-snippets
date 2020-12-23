@@ -17,7 +17,11 @@
     "github": "esy/pesy-reason-template"
   },
   "buildDirs": {
-    "library": {},
+    "library": {
+      "imports": [
+        "Angstrom = require('@opam/angstrom')"
+      ]
+    },
     "bin": {
       "imports": [
         "Library = require('reason-snippets/library')",
